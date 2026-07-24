@@ -2,8 +2,13 @@ streamlit
 zhipuai
 langchain
 langchain-community
+langchain-huggingface
+faiss-cpu
 sentence-transformers
 chromadb
 pypdf
 FlagEmbedding
-torch
+pandas
+rank-bm25
+jieba
+numpy

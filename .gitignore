@@ -1,0 +1,16 @@
+# Model files
+models/
+
+# Vector database
+faiss_db/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment
+.venv/
+venv/
+
+# Mac
+.DS_Store
