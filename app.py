@@ -8,9 +8,13 @@ from rag.bm25_store import build_bm25_index
 from rag.evaluator import build_evaluation_table, evaluate_rag
 from rag.llm import ask_llm
 from rag.loader import load_and_chunk
-from rag.retriever import retrieve_with_multi_recall
+from rag.retrieval_service import RetrievalService
 from rag.utils import cleanup_memory
 from rag.vector_store import build_vector_store, save_vector_store
+
+from tools.retrieval_tool import RetrievalTool
+
+from agent.simple_agent import SimpleAgent
 
 # ===== session_state =====
 for key, default in [
@@ -76,12 +80,11 @@ if st.button("发送") and question and db is not None:
         f"用户：{q}\nAI：{a}\n" for q, a in st.session_state.history[-3:]
     )
     with st.spinner("正在检索和生成回答..."):
-        docs = retrieve_with_multi_recall(
-            question, db, chunks, bm25_index, use_rerank=use_rerank
-        )
-        context = "\n".join(doc.page_content for doc in docs)
-        prompt = f"以下是历史对话：\n{history_text}\n请根据以下资料回答问题：\n资料：\n{context}\n当前问题：\n{question}，请在100字以内回答。"
-        answer = ask_llm(prompt)
+        retrieval_service = RetrievalService(db, chunks, bm25_index)
+        retrieval_tool = RetrievalTool(retrieval_service)
+        agent = SimpleAgent(retrieval_tool)
+
+        answer, docs = agent.run(question, history_text)
 
     st.session_state.history.append((question, answer))
     if eval_mode:
