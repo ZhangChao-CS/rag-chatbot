@@ -36,15 +36,7 @@ def extract_paragraphs(pdf_path):
         doc.close()
 
     return paragraphs
-
-def split_documents(documents):
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=config.CHUNK_SIZE,
-        chunk_overlap=config.CHUNK_OVERLAP,
-    )
-    chunks = splitter.split_documents(documents)
-    return chunks[: config.MAX_CHUNKS]
-
+    
 
 def load_and_chunk(pdf_path):
 
