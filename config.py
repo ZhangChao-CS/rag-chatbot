@@ -38,8 +38,16 @@ EVAL_WEIGHTS = {
     "context_utilization": 0.25,
 }
 
-# 内存优化
+# 内存优化（Mac 上限制线程数，避免 CPU/内存争抢导致系统卡死）
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128")
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 os.environ.setdefault("MKL_NUM_THREADS", "2")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
+# 模型推理批次（越小越省内存，但索引会稍慢）
+EMBEDDING_BATCH_SIZE = 4
+RERANK_BATCH_SIZE = 4
+
+# 内存守卫：可用内存低于此值（MB）时拒绝加载模型
+MIN_AVAILABLE_MEMORY_MB = 800

@@ -12,3 +12,4 @@ pandas
 rank-bm25
 jieba
 numpy
+psutil

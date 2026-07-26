@@ -10,25 +10,30 @@ def extract_paragraphs(pdf_path):
     doc = fitz.open(pdf_path)
     paragraphs = []
 
-    for page_id, page in enumerate(doc):
-        text = page.get_text("text")
-        if not text:
-            continue
-        # 按空行分段
-        paras = text.split("\n\n")
-
-        for p in paras:
-            p = p.strip()
-
-            if len(p) < 50:
+    try:
+        page_count = min(len(doc), config.MAX_PAGES)
+        for page_id in range(page_count):
+            page = doc[page_id]
+            text = page.get_text("text")
+            if not text:
                 continue
+            # 按空行分段
+            paras = text.split("\n\n")
 
-            paragraphs.append(
-                {
-                    "text": p,
-                    "page": page_id + 1
-                }
-            )
+            for p in paras:
+                p = p.strip()
+
+                if len(p) < 50:
+                    continue
+
+                paragraphs.append(
+                    {
+                        "text": p,
+                        "page": page_id + 1
+                    }
+                )
+    finally:
+        doc.close()
 
     return paragraphs
 
