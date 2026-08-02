@@ -1,13 +1,16 @@
 class AgentState:
-    def __init__(self, question: str, history: str):
+    
+    def __init__(
+        self,
+        question,
+        history_text
+    ):
+
         self.question = question
-        self.history = history
+        self.history_text = history_text
 
-        self.thought = ""
-        self.action = ""
+        self.thought=""
+        self.action=None
 
-        self.tool_input = ""
-
-        self.observation = ""
-
-        self.answer = ""
+        self.observation=""
+        self.answer=""

@@ -16,6 +16,8 @@ from rag.vector_store import build_vector_store, save_vector_store
 from tools.retrieval_tool import RetrievalTool
 from tools.calculator_tool import CalculatorTool
 
+from services.query_rewriter import QueryRewriteService
+
 from agent.simple_agent import SimpleAgent
 
 # ===== session_state =====
@@ -128,8 +130,10 @@ if st.button("发送") and question and db is not None:
         f"用户：{q}\nAI：{a}\n" for q, a in st.session_state.history[-3:]
     )
     with st.spinner("正在检索和生成回答..."):
+        rewrite_service = QueryRewriteService()
+
         retrieval_service = RetrievalService(db, chunks, bm25_index)
-        retrieval_tool = RetrievalTool(retrieval_service)
+        retrieval_tool = RetrievalTool(retrieval_service, rewrite_service, use_rerank=use_rerank)
         calculator_tool = CalculatorTool()
 
         agent = SimpleAgent([
@@ -137,7 +141,7 @@ if st.button("发送") and question and db is not None:
             calculator_tool
         ])
 
-        answer, docs = agent.run(question, history_text, use_rerank=use_rerank)
+        answer, docs = agent.run(question, history_text)
 
     st.session_state.history.append((question, answer))
     if eval_mode:

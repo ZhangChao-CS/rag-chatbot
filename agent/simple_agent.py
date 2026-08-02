@@ -1,5 +1,9 @@
 from rag.llm import ask_llm
+
 from agent.state import AgentState
+from agent.action import ToolAction
+
+from tools.registry import ToolRegistry
 
 import json
 
@@ -7,77 +11,127 @@ import json
 class SimpleAgent:
 
     def __init__(self, tools):
-        self.tools = {
-            tool.name: tool
-            for tool in tools
-        }
 
-    def decide_tool(self, question: str) -> str:
+        self.registry = ToolRegistry()
+
+        for tool in tools:
+
+            self.registry.register(tool)
+
+    def build_tool_prompt(self):
+
+        tools = self.registry.get_tool_schema()
+
+        text = ""
+
+        for tool in tools:
+
+            text += f"""
+            工具名称:
+            {tool['name']}
+
+            功能:
+            {tool['description']}
+
+            参数格式:
+            {json.dumps(
+                tool['parameters'],
+                ensure_ascii=False,
+                indent=2
+            )}
+
+            ------------------
+            """
+
+        return text
+
+    def decide_tool(self, question):
+
         prompt = f"""
         你是一个 AI Agent。
 
-        你可以使用以下工具：
-        1. retrieval
-        适用于：
-        - 查询上传的 PDF
-        - 查询论文
-        - 查询知识库
-        - 查询文档内容
+        可用工具：
+        {self.build_tool_prompt()}
 
-        2. calculator
-        适用于：
-        - 数学计算
-        - 四则运算
-        - 百分比
-        - 幂运算等
-
-        3. direct
-        适用于：
-        - 常识问题
-        - 闲聊
-        - 不需要调用工具即可回答的问题
-
-        请严格按照下面 JSON 输出：
+        请严格输出 JSON：
         {{
-            "thought": "...",
-            "tool": "retrieval | calculator | direct",
-            "tool_input": "..."
+            "thought":"",
+            "action":
+            {{
+                "tool":"",
+                "arguments":{{"必须严格符合工具参数格式"}}
+            }}
         }}
 
-        要求：
-        1.tool 必须是 retrieval、calculator、direct 三者之一。
-        2.retrieval 的 tool_input 一般就是用户问题。
-        3.calculator 的 tool_input 必须是数学表达式，例如 "23*45+18"。
-        4.direct 的 tool_input 留空即可。
+        注意：
+        arguments必须是键值对。
+        字符串参数必须直接填写字符串。
+        不要额外嵌套对象。
+
+        如果无需工具：
+        action.tool = "direct"
+        arguments为空。
 
         问题：
         {question}
         """
 
         response = ask_llm(prompt)
-        print(f"[Decision Raw] {response}")
 
-        # 去掉Markdown代码块
-        response = response.replace("```json", "").replace("```", "").strip()
+        response = (
+            response
+            .replace("```json","")
+            .replace("```","")
+            .strip()
+        )
 
         try:
+
             result = json.loads(response)
 
-            thought = result.get("thought", "")
-            tool = result.get("tool", "retrieval")
-            tool_input = result.get("tool_input", question)
-
         except Exception as e:
-            print(f"[Decision Error] {e}")
-            thought = ""
-            tool = "retrieval"
-            tool_input = ""
 
-        print(f"[Thought] {thought}")
-        print(f"[Action] {tool}")
-        print(f"[Tool Input] {tool_input}")
+            print(
+                "[Decision Parse Error]",
+                e
+            )
 
-        return thought, tool, tool_input
+            return (
+                "",
+                ToolAction(
+                    tool="direct",
+                    arguments={}
+                )
+            )
+
+        thought = result.get(
+            "thought",
+            ""
+        )
+
+        action_data = result.get(
+            "action",
+            {}
+        )
+
+        action = ToolAction(
+            tool=action_data.get(
+                "tool",
+                "direct"
+            ),
+
+            arguments=
+                action_data.get(
+                    "arguments",
+                    {}
+                )
+        )
+
+        print("[Thought]", thought)
+        print("[Action]", action.tool)
+        print("[Arguments]", action.arguments)
+
+        return thought, action
 
     def reason_after_observation(self, state: AgentState):
 
@@ -110,49 +164,83 @@ class SimpleAgent:
 
         result = json.loads(response)
 
-        state.thought = result["thought"]
-        state.answer = result["answer"]
+        state.thought=result.get(
+            "thought",
+            ""
+        )
 
-    def run(self, question: str, history_text: str, use_rerank: bool = True):
-        state = AgentState(question, history_text)
-        state.thought, state.action, state.tool_input = self.decide_tool(question)
+        state.answer=result.get(
+            "answer",
+            ""
+        )
 
-        if state.action == "retrieval":
-            tool = self.tools["retrieval"]
+    def validate_action(self, action):
 
-            docs = tool.run(state.tool_input, use_rerank=use_rerank)
+        tool = self.registry.get(
+            action.tool
+        )
 
-            print(f"[Observation] Retrieved {len(docs)} documents")
+        schema = tool.args_schema
 
-            state.observation = "\n".join(
-                doc.page_content for doc in docs
+        try:
+            validated = schema(
+                **action.arguments
             )
 
-            self.reason_after_observation(state)
-            print(f"[Thought2] {state.thought}")
+        except Exception as e:
+            print(
+                "[Schema Error]",
+                e
+            )
 
-            return state.answer, docs
-        # ---------------- calculator ----------------
-        elif state.action == "calculator":
+            print(
+                "[Arguments]",
+                action.arguments
+            )
 
-            tool = self.tools["calculator"]
-            result = tool.run(state.tool_input)
-            state.observation = str(result)
-            self.reason_after_observation(state)
+            raise e
 
-            print(f"[Thought2] {state.thought}")
+        return validated
+
+    def run(self, question, history_text):
+
+        state = AgentState(question, history_text)
+
+        state.thought, state.action = self.decide_tool(question)
+
+        # direct
+        if state.action.tool == "direct":
+
+            state.answer = ask_llm(
+                f"""
+                历史：
+                {history_text}
+
+                问题：
+                {question}
+                """
+            )
 
             return state.answer, []
 
-        # ---------------- direct ----------------
-        else:
-            prompt = f"""
-            以下是历史对话：
-            {history_text}
-            当前问题：
-            {question}
-            请直接回答，控制在100字以内。
-            """
-            state.answer = ask_llm(prompt)
+        try:
+            tool = self.registry.get(
+                state.action.tool
+            )
 
-            return state.answer, []
+        except Exception:
+            state.answer = ("工具不存在")
+            return state.answer,[]
+
+        args = self.validate_action(state.action)
+
+        result = tool.run(**args.model_dump())
+
+        state.observation = (result["observation"])
+
+        self.reason_after_observation(state)
+
+        return (
+            state.answer,
+            result["raw"]
+        )

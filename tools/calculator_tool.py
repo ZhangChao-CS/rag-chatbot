@@ -3,6 +3,8 @@ import operator
 
 from tools.base_tool import BaseTool
 
+from tools.schemas import CalculatorArgs
+
 _SAFE_OPERATORS = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
@@ -39,8 +41,33 @@ class CalculatorTool(BaseTool):
     def name(self):
         return "calculator"
 
-    def run(self, expression):
-        if not expression or not isinstance(expression, str):
-            raise ValueError("表达式不能为空")
-        tree = ast.parse(expression.strip(), mode="eval")
-        return _safe_eval(tree.body)
+    @property
+    def description(self):
+
+        return (
+            "执行数学计算,"
+            "适用于：四则运算、百分比、幂运算"
+        )
+
+    @property
+    def args_schema(self):
+        return CalculatorArgs
+        
+    def run(self, **kwargs):
+        expression = kwargs["expression"]
+        try:
+            tree = ast.parse(expression.strip(), mode="eval")
+
+            result = _safe_eval(tree.body)
+
+            return self.create_result(
+                observation=str(result),
+                raw=result
+            )
+
+        except Exception as e:
+
+            return self.create_result(
+                observation=f"计算失败:{str(e)}",
+                raw=None
+            )

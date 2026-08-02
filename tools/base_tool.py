@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class BaseTool(ABC):
 
     @property
@@ -7,7 +8,28 @@ class BaseTool(ABC):
     def name(self):
         pass
 
+
+    @property
     @abstractmethod
-    def run(self, tool_input):
+    def description(self):
         pass
-    
+
+    @staticmethod
+    def create_result(observation, raw=None):
+
+        return {
+            "observation":
+                observation,
+
+            "raw":
+                raw
+        }
+
+    @property
+    @abstractmethod
+    def args_schema(self):
+        pass
+
+    @abstractmethod
+    def run(self, **kwargs):
+        pass
