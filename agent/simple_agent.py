@@ -1,22 +1,21 @@
-from rag.llm import ask_llm
-
-from agent.state import AgentState
-from agent.action import ToolAction
-
-from tools.registry import ToolRegistry
-
 import json
+import time
+
+from agent.action import ToolAction
+from agent.state import AgentState
+from rag.llm import ask_llm
+from tools.registry import ToolRegistry
 
 
 class SimpleAgent:
-
-    def __init__(self, tools):
+    def __init__(self, tools, memory):
 
         self.registry = ToolRegistry()
 
         for tool in tools:
-
             self.registry.register(tool)
+
+        self.memory = memory
 
     def build_tool_prompt(self):
 
@@ -25,20 +24,15 @@ class SimpleAgent:
         text = ""
 
         for tool in tools:
-
             text += f"""
             工具名称:
-            {tool['name']}
+            {tool["name"]}
 
             功能:
-            {tool['description']}
+            {tool["description"]}
 
             参数格式:
-            {json.dumps(
-                tool['parameters'],
-                ensure_ascii=False,
-                indent=2
-            )}
+            {json.dumps(tool["parameters"], ensure_ascii=False, indent=2)}
 
             ------------------
             """
@@ -78,53 +72,23 @@ class SimpleAgent:
 
         response = ask_llm(prompt)
 
-        response = (
-            response
-            .replace("```json","")
-            .replace("```","")
-            .strip()
-        )
+        response = response.replace("```json", "").replace("```", "").strip()
 
         try:
-
             result = json.loads(response)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
+            print("[Decision Parse Error]", e)
 
-            print(
-                "[Decision Parse Error]",
-                e
-            )
+            return ("", ToolAction(tool="direct", arguments={}))
 
-            return (
-                "",
-                ToolAction(
-                    tool="direct",
-                    arguments={}
-                )
-            )
+        thought = result.get("thought", "")
 
-        thought = result.get(
-            "thought",
-            ""
-        )
-
-        action_data = result.get(
-            "action",
-            {}
-        )
+        action_data = result.get("action", {})
 
         action = ToolAction(
-            tool=action_data.get(
-                "tool",
-                "direct"
-            ),
-
-            arguments=
-                action_data.get(
-                    "arguments",
-                    {}
-                )
+            tool=action_data.get("tool", "direct"),
+            arguments=action_data.get("arguments", {}),
         )
 
         print("[Thought]", thought)
@@ -156,60 +120,65 @@ class SimpleAgent:
 
         response = ask_llm(prompt)
 
-        response = (
-            response.replace("```json", "")
-            .replace("```", "")
-            .strip()
-        )
+        response = response.replace("```json", "").replace("```", "").strip()
 
         result = json.loads(response)
 
-        state.thought=result.get(
-            "thought",
-            ""
-        )
+        state.thought = result.get("thought", "")
 
-        state.answer=result.get(
-            "answer",
-            ""
-        )
+        state.answer = result.get("answer", "")
 
     def validate_action(self, action):
 
-        tool = self.registry.get(
-            action.tool
-        )
+        tool = self.registry.get(action.tool)
 
         schema = tool.args_schema
 
         try:
-            validated = schema(
-                **action.arguments
-            )
+            validated = schema(**action.arguments)
 
         except Exception as e:
-            print(
-                "[Schema Error]",
-                e
-            )
+            print("[Schema Error]", e)
 
-            print(
-                "[Arguments]",
-                action.arguments
-            )
+            print("[Arguments]", action.arguments)
 
-            raise e
+            raise e  # noqa: TRY201
 
         return validated
 
-    def run(self, question, history_text):
+    def run(self, question):
+        # ================= Memory Retrieve =================
+
+        history_text = self.memory.get_context()
 
         state = AgentState(question, history_text)
 
+        state.trace.question = question
+
+        state.trace.add_step(stage="memory_retrieve", context=history_text)
+
+        self.memory.add_user_message(question)
+
+        # ================= Planner =================
+
+        start = time.time()
+
         state.thought, state.action = self.decide_tool(question)
 
-        # direct
+        planner_time = time.time() - start
+
+        state.trace.add_step(
+            stage="planner",
+            duration=planner_time,
+            thought=state.thought,
+            tool=state.action.tool,
+            arguments=state.action.arguments,
+        )
+
+        # ================= Direct =================
+
         if state.action.tool == "direct":
+            start = time.time()
 
             state.answer = ask_llm(
                 f"""
@@ -221,26 +190,106 @@ class SimpleAgent:
                 """
             )
 
-            return state.answer, []
+            duration = time.time() - start
 
-        try:
-            tool = self.registry.get(
-                state.action.tool
+            state.trace.add_step(
+                stage="direct_answer", duration=duration, answer=state.answer
             )
 
-        except Exception:
-            state.answer = ("工具不存在")
-            return state.answer,[]
+            self.memory.add_ai_message(state.answer)
 
-        args = self.validate_action(state.action)
+            state.trace.add_step(stage="memory_save", message=state.answer)
 
-        result = tool.run(**args.model_dump())
+            state.trace.answer = state.answer
 
-        state.observation = (result["observation"])
+            print(state.trace)
+
+            return state.answer, []
+
+        # ================= Tool =================
+
+        try:
+            tool = self.registry.get(state.action.tool)
+
+        except Exception as e:  # noqa: BLE001
+            state.answer = "工具不存在"
+
+            state.trace.add_step(stage="error", error=str(e))
+
+            state.trace.answer = state.answer
+
+            print(state.trace)
+
+            return state.answer, []
+
+        # ================= Validate =================
+
+        try:
+            args = self.validate_action(state.action)
+
+        except Exception as e:  # noqa: BLE001
+            state.trace.add_step(
+                stage="validation_error", error=str(e), arguments=state.action.arguments
+            )
+
+            state.answer = "工具参数校验失败"
+
+            state.trace.answer = state.answer
+
+            print(state.trace)
+
+            return state.answer, []
+
+        # ================= Tool Execute =================
+
+        start = time.time()
+
+        try:
+            result = tool.run(**args.model_dump())
+
+            tool_time = time.time() - start
+
+            state.observation = result["observation"]
+
+            state.trace.add_step(
+                stage="tool_execute",
+                duration=tool_time,
+                tool=state.action.tool,
+                input=args.model_dump(),
+                observation=state.trace.summarize_observation(state.observation),
+            )
+
+        except Exception as e:  # noqa: BLE001
+            tool_time = time.time() - start
+
+            state.trace.add_step(stage="tool_error", duration=tool_time, error=str(e))
+
+            state.answer = "工具执行失败"
+
+            state.trace.answer = state.answer
+
+            print(state.trace)
+
+            return state.answer, []
+
+        # ================= Reason =================
+
+        start = time.time()
 
         self.reason_after_observation(state)
 
-        return (
-            state.answer,
-            result["raw"]
+        reason_time = time.time() - start
+
+        state.trace.add_step(
+            stage="reason", duration=reason_time, thought=state.thought
         )
+
+        state.trace.answer = state.answer
+
+        self.memory.add_ai_message(state.answer)
+
+        state.trace.add_step(stage="memory_save", message=state.answer)
+
+        print(state.trace)
+
+        return (state.answer, result["raw"])

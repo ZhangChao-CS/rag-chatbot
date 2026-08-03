@@ -3,8 +3,8 @@ from rag.bm25_store import bm25_retrieve
 from rag.reranker import rerank
 from rag.retriever import reciprocal_rank_fusion
 
-class RetrievalService:
 
+class RetrievalService:
     def __init__(self, db, chunks, bm25_index):
         self.db = db
         self.chunks = chunks

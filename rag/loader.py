@@ -1,9 +1,9 @@
 import fitz
-
 from langchain.schema import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 import config
+
 
 def extract_paragraphs(pdf_path):
 
@@ -26,31 +26,21 @@ def extract_paragraphs(pdf_path):
                 if len(p) < 50:
                     continue
 
-                paragraphs.append(
-                    {
-                        "text": p,
-                        "page": page_id + 1
-                    }
-                )
+                paragraphs.append({"text": p, "page": page_id + 1})
     finally:
         doc.close()
 
     return paragraphs
-    
+
 
 def load_and_chunk(pdf_path):
 
     paragraphs = extract_paragraphs(pdf_path)
-    documents=[]
+    documents = []
 
     for item in paragraphs:
         documents.append(
-            Document(
-                page_content=item["text"],
-                metadata={
-                    "page":item["page"]
-                }
-            )
+            Document(page_content=item["text"], metadata={"page": item["page"]})
         )
 
     # 超长段落继续切
@@ -58,19 +48,9 @@ def load_and_chunk(pdf_path):
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config.CHUNK_SIZE,
         chunk_overlap=config.CHUNK_OVERLAP,
-        separators=[
-            "\n\n",
-            "\n",
-            "。",
-            "！",
-            "？",
-            ". ",
-            " "
-        ]
+        separators=["\n\n", "\n", "。", "！", "？", ". ", " "],
     )
 
-    chunks = splitter.split_documents(
-        documents
-    )
+    chunks = splitter.split_documents(documents)
 
-    return chunks[:config.MAX_CHUNKS]
+    return chunks[: config.MAX_CHUNKS]

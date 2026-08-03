@@ -1,10 +1,9 @@
+from agent.trace import AgentTrace
+
+
 class AgentState:
-    
-    def __init__(
-        self,
-        question,
-        history_text
-    ):
+
+    def __init__(self, question, history_text):
 
         self.question = question
         self.history_text = history_text
@@ -14,3 +13,5 @@ class AgentState:
 
         self.observation=""
         self.answer=""
+
+        self.trace = AgentTrace()

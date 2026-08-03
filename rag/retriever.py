@@ -1,6 +1,7 @@
 import config
 from rag.utils import doc_id
 
+
 # RRF
 def reciprocal_rank_fusion(vector_results, bm25_results, k=None):
     k = k or config.RRF_K

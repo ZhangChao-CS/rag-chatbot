@@ -6,19 +6,17 @@ import pandas as pd
 import streamlit as st
 
 import config
+from agent.simple_agent import SimpleAgent
 from rag.bm25_store import build_bm25_index
 from rag.evaluator import build_evaluation_table, evaluate_rag
 from rag.loader import load_and_chunk
 from rag.retrieval_service import RetrievalService
 from rag.utils import check_memory_available, cleanup_memory, get_memory_info
 from rag.vector_store import build_vector_store, save_vector_store
-
-from tools.retrieval_tool import RetrievalTool
-from tools.calculator_tool import CalculatorTool
-
 from services.query_rewriter import QueryRewriteService
-
-from agent.simple_agent import SimpleAgent
+from tools.calculator_tool import CalculatorTool
+from tools.retrieval_tool import RetrievalTool
+from memory.conversation_memory import ConversationMemory
 
 # ===== session_state =====
 for key, default in [
@@ -78,6 +76,7 @@ def load_document(file_bytes: bytes, file_path: str):
     st.session_state.doc_hash = doc_hash
     st.session_state.db_loaded = True
 
+
 st.set_page_config(page_title="RAG问答系统", page_icon="📚", layout="wide")
 st.title("📚 我的RAG问答系统")
 
@@ -114,7 +113,7 @@ if uploaded_file is not None:
             st.success("✅ 文档加载完成！")
         except MemoryError as e:
             st.error(str(e))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             st.error(f"文档加载失败：{e}")
 else:
     st.warning("请先上传你的PDF文件")
@@ -124,37 +123,50 @@ chunks = st.session_state.chunks
 bm25_index = st.session_state.bm25_index
 
 # ===== 问答 =====
-question = st.text_input("请输入你的问题：")
-if st.button("发送") and question and db is not None:
-    history_text = "".join(
-        f"用户：{q}\nAI：{a}\n" for q, a in st.session_state.history[-3:]
-    )
-    with st.spinner("正在检索和生成回答..."):
-        rewrite_service = QueryRewriteService()
+with st.form(key="question_form", clear_on_submit=True):
+    col1, col2 = st.columns([10, 1])
 
-        retrieval_service = RetrievalService(db, chunks, bm25_index)
-        retrieval_tool = RetrievalTool(retrieval_service, rewrite_service, use_rerank=use_rerank)
-        calculator_tool = CalculatorTool()
+    with col1:
+        question = st.text_input("请输入你的问题：", label_visibility="collapsed")
 
-        agent = SimpleAgent([
-            retrieval_tool,
-            calculator_tool
-        ])
+    with col2:
+        submitted = st.form_submit_button("发送", use_container_width=True)
 
-        answer, docs = agent.run(question, history_text)
+    if submitted and question and db is not None:
+        with st.spinner("正在检索和生成回答..."):
+            rewrite_service = QueryRewriteService()
 
-    st.session_state.history.append((question, answer))
-    if eval_mode:
-        st.session_state.eval_questions.append(question)
-        st.session_state.eval_answers.append(answer)
-        st.session_state.eval_contexts.append([doc.page_content for doc in docs])
+            retrieval_service = RetrievalService(db, chunks, bm25_index)
 
-    st.write("## 💬 对话记录")
-    for q, a in st.session_state.history[-5:]:
-        st.write("🙋‍♂️", q)
-        st.write("🤖", a)
+            # ================= Tools =================
+            retrieval_tool = RetrievalTool(
+                retrieval_service, rewrite_service, use_rerank=use_rerank
+            )
+            calculator_tool = CalculatorTool()
 
-    cleanup_memory()
+            # ================= Memory =================
+            if "memory" not in st.session_state:
+                st.session_state.memory = ConversationMemory(max_messages=10)
+
+            if "agent" not in st.session_state:
+                st.session_state.agent = SimpleAgent(
+                    [retrieval_tool, calculator_tool], memory=st.session_state.memory
+                )
+
+            answer, docs = st.session_state.agent.run(question)
+
+        st.session_state.history.append((question, answer))
+        if eval_mode:
+            st.session_state.eval_questions.append(question)
+            st.session_state.eval_answers.append(answer)
+            st.session_state.eval_contexts.append([doc.page_content for doc in docs])
+
+        st.write("## 💬 对话记录")
+        for q, a in st.session_state.history[-5:]:
+            st.write("🙋‍♂️", q)
+            st.write("🤖", a)
+
+        cleanup_memory()
 
 # ===== LLM-as-a-Judge 评估 =====
 if eval_mode and st.session_state.eval_questions:
