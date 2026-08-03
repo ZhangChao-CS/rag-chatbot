@@ -23,7 +23,6 @@ class RetrievalTool(BaseTool):
         return RetrievalArgs
 
     def run(self, **kwargs):
-
         query = kwargs["query"]
 
         if self.rewrite_service:

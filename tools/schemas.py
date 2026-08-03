@@ -2,11 +2,12 @@ from pydantic import BaseModel
 
 
 class RetrievalArgs(BaseModel):
-
-    query:str
+    query: str
 
 
 class CalculatorArgs(BaseModel):
+    expression: str
 
-    expression:str
-    
+
+class WebSerchArgs(BaseModel):
+    query: str

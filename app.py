@@ -7,6 +7,7 @@ import streamlit as st
 
 import config
 from agent.simple_agent import SimpleAgent
+from memory.conversation_memory import ConversationMemory
 from rag.bm25_store import build_bm25_index
 from rag.evaluator import build_evaluation_table, evaluate_rag
 from rag.loader import load_and_chunk
@@ -16,7 +17,7 @@ from rag.vector_store import build_vector_store, save_vector_store
 from services.query_rewriter import QueryRewriteService
 from tools.calculator_tool import CalculatorTool
 from tools.retrieval_tool import RetrievalTool
-from memory.conversation_memory import ConversationMemory
+from tools.web_search_tool import WebSearchTool
 
 # ===== session_state =====
 for key, default in [
@@ -143,6 +144,7 @@ with st.form(key="question_form", clear_on_submit=True):
                 retrieval_service, rewrite_service, use_rerank=use_rerank
             )
             calculator_tool = CalculatorTool()
+            web_search_tool = WebSearchTool()
 
             # ================= Memory =================
             if "memory" not in st.session_state:
@@ -150,7 +152,8 @@ with st.form(key="question_form", clear_on_submit=True):
 
             if "agent" not in st.session_state:
                 st.session_state.agent = SimpleAgent(
-                    [retrieval_tool, calculator_tool], memory=st.session_state.memory
+                    [retrieval_tool, calculator_tool, web_search_tool],
+                    memory=st.session_state.memory,
                 )
 
             answer, docs = st.session_state.agent.run(question)

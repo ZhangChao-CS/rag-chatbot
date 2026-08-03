@@ -55,5 +55,5 @@ class CalculatorTool(BaseTool):
 
             return self.create_result(observation=str(result), raw=result)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             return self.create_result(observation=f"计算失败:{e!s}", raw=None)
