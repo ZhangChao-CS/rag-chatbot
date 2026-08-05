@@ -1,17 +1,60 @@
+from dataclasses import dataclass, field
+from typing import Optional
+
+from agent.planning.schema import Plan
+from agent.reflection.schema import ReflectionResult
 from agent.trace import AgentTrace
 
 
+@dataclass
 class AgentState:
+    question: str
 
-    def __init__(self, question, history_text):
+    history_text: str
 
-        self.question = question
-        self.history_text = history_text
+    # ==================
+    # Agent运行状态
+    # ==================
 
-        self.thought=""
-        self.action=None
+    thought: str = ""
 
-        self.observation=""
-        self.answer=""
+    action: object = None
 
-        self.trace = AgentTrace()
+    observation: list[str] = field(default_factory=list)
+
+    reflection: Optional[ReflectionResult] = None  # noqa: UP045
+
+    plan: Optional[Plan] = None  # noqa: UP045
+
+    answer: str = ""
+
+    # ==================
+    # ReAct状态
+    # ==================
+
+    step_count: int = 0
+
+    max_steps: int = 5
+
+    finished: bool = False
+
+    # ==================
+    # Trace
+    # ==================
+
+    trace: AgentTrace = field(default_factory=AgentTrace)
+
+    def next_step(self):
+
+        self.step_count += 1
+
+    def can_continue(self):
+
+        return self.step_count < self.max_steps and not self.finished
+
+    def get_observation_text(self):
+
+        if not self.observation:
+            return ""
+
+        return "\n\n".join(self.observation)
