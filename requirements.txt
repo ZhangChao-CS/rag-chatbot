@@ -13,3 +13,4 @@ rank-bm25
 jieba
 numpy
 psutil
+tavily-python
