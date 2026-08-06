@@ -1,25 +1,15 @@
-from typing import List, Optional  # noqa: UP035
+from typing import Optional  # noqa: UP035
 
 from pydantic import BaseModel
 
+from agent.planning.schema import PlanRepair, TaskResult, TaskStatus
+
 
 class ReflectionResult(BaseModel):
-    # 是否完成
-
-    sufficient: bool
-
-    # 可信度
-
-    confidence: float
-
-    # 当前判断
-
-    reason: str
-
-    # 缺少信息
-
-    missing_information: List[str] = []  # noqa: UP006
-
-    # 推荐工具
-
-    suggested_tool: Optional[str] = None  # noqa: UP045
+    task_id: int
+    status: TaskStatus
+    reason: str = ""
+    confidence: float = 0.0
+    retry: bool = False
+    result: Optional[TaskResult] = None  # noqa: UP045
+    plan_repair: PlanRepair = PlanRepair()

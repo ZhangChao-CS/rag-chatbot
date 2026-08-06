@@ -9,5 +9,5 @@ class CalculatorArgs(BaseModel):
     expression: str
 
 
-class WebSerchArgs(BaseModel):
+class WebSearchArgs(BaseModel):
     query: str

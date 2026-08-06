@@ -1,5 +1,19 @@
 import gc
+import json
 import platform
+import re
+
+
+def parse_llm_json(text: str, error_prefix: str = "LLM") -> dict:
+    """解析 LLM 返回的 JSON，兼容 markdown 代码块包裹。"""
+    text = text.replace("```json", "").replace("```", "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match is None:
+        raise ValueError(f"{error_prefix} 输出不是 JSON：\n{text}")
+    return json.loads(match.group())
 
 
 def doc_id(document) -> str:

@@ -150,13 +150,14 @@ with st.form(key="question_form", clear_on_submit=True):
             if "memory" not in st.session_state:
                 st.session_state.memory = ConversationMemory(max_messages=10)
 
-            if "agent" not in st.session_state:
-                st.session_state.agent = SimpleAgent(
-                    [retrieval_tool, calculator_tool, web_search_tool],
-                    memory=st.session_state.memory,
-                )
+            # 每次提问重建 Agent，确保 use_rerank 等工具配置生效
+            agent = SimpleAgent(
+                [retrieval_tool, calculator_tool, web_search_tool],
+                memory=st.session_state.memory,
+                local_kb_available=True,
+            )
 
-            answer, docs = st.session_state.agent.run(question)
+            answer, docs = agent.run(question)
 
         st.session_state.history.append((question, answer))
         if eval_mode:

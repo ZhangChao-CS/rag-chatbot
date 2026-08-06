@@ -15,7 +15,7 @@ class RetrievalTool(BaseTool):
     @property
     def description(self):
 
-        return "查询本地知识库，适用于PDF、论文和文档内容检索"
+        return "检索用户已上传的 PDF 本地知识库。适用于：文档内的概念解释、方法原理、术语定义、论文/模型对比。本地知识库已加载时应优先于 web_search 使用。"
 
     @property
     def args_schema(self):

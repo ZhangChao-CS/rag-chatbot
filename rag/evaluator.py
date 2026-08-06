@@ -1,35 +1,16 @@
-import json
-import re
-
-from zhipuai import ZhipuAI
-
 import config
+from rag.llm import ask_llm
 from rag.prompts import (
     ANSWER_RELEVANCY_PROMPT,
     CONTEXT_UTILIZATION_PROMPT,
     FAITHFULNESS_PROMPT,
 )
-
-client = ZhipuAI(api_key=config.API_KEY)
-
-
-def _parse_json(text: str) -> dict:
-    """解析 LLM 返回的 JSON，兼容 markdown 代码块包裹"""
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    return json.loads(text)
+from rag.utils import parse_llm_json
 
 
 def judge(prompt: str) -> dict:
-    response = client.chat.completions.create(
-        model=config.LLM_MODEL,
-        temperature=0,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    text = response.choices[0].message.content
-    result = _parse_json(text)
+    text = ask_llm(prompt, max_tokens=500, temperature=0)
+    result = parse_llm_json(text, error_prefix="Evaluator")
     result["score"] = float(result["score"])
     return result
 
